@@ -56,7 +56,7 @@ STATIC_LIB = $(DIST_DIR)/lib$(LIB_NAME).a
 SINGLE_HEADER = $(DIST_DIR)/$(LIB_NAME).h
 
 # --- Flags ---
-CFLAGS_BASE = -std=c11 -Wall -Wextra -pedantic -I$(INCLUDE_DIR) -I$(COMMON_INCLUDE_DIR) -I$(CMP_DIR)/$(INCLUDE_DIR) -D_POSIX_C_SOURCE=201112L
+CFLAGS_BASE = -std=c11 -Wall -Wextra -pedantic -I$(INCLUDE_DIR) -I$(COMMON_INCLUDE_DIR) -I$(CMP_DIR)/$(INCLUDE_DIR) 
 
 ASFLAGS_BASE = -f elf64
 LDFLAGS = -no-pie -lm
@@ -160,8 +160,8 @@ dist: clean
 	@echo '#include <assert.h>' >> dist/test_dist.c; 
 	@echo 'int main() {' >> dist/test_dist.c; 
 	@echo '    bignum_t res = {.words = {0}, .len = 0};' >> dist/test_dist.c; 
-	@echo '    bignum_t a = {.words = {12345}, .len = 1};;' >> dist/test_dist.c;
-	@echo '    bignum_t b = {.words = {10000}, .len = 1};;' >> dist/test_dist.c;		
+	@echo '    bignum_t a = {.words = {12345}, .len = 1};' >> dist/test_dist.c;
+	@echo '    bignum_t b = {.words = {10000}, .len = 1};' >> dist/test_dist.c;		
 	@echo '    $(LIB_NAME)(&res, &a, &b);' >> dist/test_dist.c; 
 	@echo '    assert(1);' >> dist/test_dist.c; 
 	@echo '    return 0;' >> dist/test_dist.c; 

@@ -51,7 +51,7 @@ BIGNUM_CAPACITY         equ 32
 BIGNUM_WORD_SIZE        equ 8
 BIGNUM_BITS             equ BIGNUM_CAPACITY * 64
 BIGNUM_OFFSET_WORDS     equ 0
-BIGNUM_OFFSET_LEN       equ BIGNUM_CAPACITY * BIGNUM_WORD_SIZE
+BIGNUM_OFFSET_LEN       equ BIGNUM_CAPACITY * BIGNUM_WORD_SIZE   ; 256
 SUCCESS                 equ 0
 ERROR_NULL_ARG          equ -1
 ERROR_OVERFLOW          equ -2
@@ -112,13 +112,22 @@ extern bignum_cmp
 ;          // 4 байта паддинга
 ;**
 bignum_sub:
-    ; Сохраним указатели на стек
-    push    rbp
+    ;------------------- prologue ------------------------------
+    push    rbp                     ; rsp = old_rsp-8   → rsp%16 = 0
     mov     rbp, rsp
-    sub     rsp, 32
-    mov     [rbp-8],  rdi    ; result*
-    mov     [rbp-16], rsi    ; a*
-    mov     [rbp-24], rdx    ; b*
+    sub     rsp, 32                 ; место под локальные переменные
+                                    ; rsp%16 = 8
+
+    ; сохраняем все callee‑saved регистры, которые будем менять
+    push    r12                     ; rsp%16 = 0
+    push    r13                     ; rsp%16 = 8
+    push    r14                     ; rsp%16 = 0
+
+    ;--- сохраняем указатели ------------------------------------
+    mov     [rbp-8],  rdi          ; result*
+    mov     [rbp-16], rsi          ; a*
+    mov     [rbp-24], rdx          ; b*
+    ;------------------------------------------------------------
 
     ; 1) validate_inputs(result, a, b)
 
@@ -132,24 +141,27 @@ bignum_sub:
 
     ; 2. Загрузка a->len и b->len (смещение 256)
     ; поле len — 4-байта signed int, за ним 4-байта паддинга
-    movsxd  r8, dword [rsi + 256]    ; r8 := (int64_t)a->len
-    movsxd  r9, dword [rdx + 256]    ; r9 := (int64_t)b->len
+    ;movsxd  r8, dword [rsi + 256]    ; r8 := (int64_t)a->len
+    ;movsxd  r9, dword [rdx + 256]    ; r9 := (int64_t)b->len
 
-    ; 3. Проверка a->len > 0
-    cmp     r8, 0
-    jle     .err_cap
+    ; ------------------------------------------------------------
+    ; 2. Чтение len из a и b (полностью 64‑битное)
+    ; ------------------------------------------------------------
+    mov     r8,  [rsi + BIGNUM_OFFSET_LEN]   ; r8 = a->len  (64‑bit)
+    mov     r9,  [rdx + BIGNUM_OFFSET_LEN]   ; r9 = b->len  (64‑bit)
 
-    ; 4. Проверка b->len > 0
-    cmp     r9, 0
-    jle     .err_cap
-
-    ; 5. Проверка a->len <= BIGNUM_CAPACITY
+    ; a->len must be in [1 .. BIGNUM_CAPACITY]
+    cmp     r8, 1
+    jl      .err_cap
     cmp     r8, BIGNUM_CAPACITY
     jg      .err_cap
 
-    ; 6. Проверка b->len <= BIGNUM_CAPACITY
+    ; b->len may be 0, but must not exceed capacity
+    cmp     r9, 0
+    jl      .err_cap          ; отрицательная длина – ошибка
     cmp     r9, BIGNUM_CAPACITY
     jg      .err_cap
+
     
     ; Всё ок validate_inputs(result, a, b) успешно завершена
 
@@ -215,11 +227,15 @@ bignum_sub:
     ; no overlap - check_buffer_overlap(result, a, b) успешно завершена
 
     ; 3) compare_operands(a, b)
-    mov     rdi, [rbp-16]    ; a*
-    mov     rsi, [rbp-24]    ; b*
-
-    call    bignum_cmp         ; возвращает int в EAX
-
+    ; Перед вызова функции нужно, чтобы rsp%16 == 8.
+    ; Сейчас rsp%16 == 0 (push‑ы сделали его 0), поэтому делаем
+    ; временное выравнивание.
+    sub     rsp, 8                 ; → rsp%16 = 8
+    mov     rdi, [rbp-16]          ; a*
+    mov     rsi, [rbp-24]          ; b*
+    call    bignum_cmp             ; возвращает int в EAX
+    add     rsp, 8                 ; восстанавливаем стек
+      
     ; Сравниваем только 32-битный EAX с нулём
     cmp     eax, 0
     jl      .err_negative
@@ -362,13 +378,17 @@ bignum_sub:
     dec     ecx
     jmp     .norm_scalar2
 
+; ------------------------------------------------------------
+; 3) При записи нового len после нормализации
+; ------------------------------------------------------------
 .norm_found:
-    inc     ecx
-    mov     [rdi + BIGNUM_OFFSET_LEN], ecx
+    inc     rcx                         ; rcx = найденный индекс + 1
+    mov     [rdi + BIGNUM_OFFSET_LEN], rcx   ; записываем **полные 8 байт**
     jmp     .norm_done
 
 .norm_all_zero:
-    mov     DWORD [rdi + BIGNUM_OFFSET_LEN], 1
+    mov     qword [rdi + BIGNUM_OFFSET_LEN], 1   ; тоже 8 байт
+    jmp     .norm_done
 
 .norm_done:
 
@@ -376,25 +396,45 @@ bignum_sub:
     mov     eax, BIGNUM_SUB_SUCCESS
 
 .done:
+
+    pop     r14
+    pop     r13
+    pop     r12
     leave
     ret
 
 .err_null:
     mov     rax, BIGNUM_SUB_ERROR_NULL_PTR
+
+    pop     r14
+    pop     r13
+    pop     r12   
     leave
     ret
 
 .err_negative:
     mov     eax, BIGNUM_SUB_ERROR_NEGATIVE_RESULT
+
+    pop     r14
+    pop     r13
+    pop     r12    
     leave
     ret
 
 .err_cap:
     mov     rax, BIGNUM_SUB_ERROR_CAPACITY_EXCEEDED
+
+    pop     r14
+    pop     r13
+    pop     r12    
     leave
     ret
 
 .err_overlap:
     mov     rax, BIGNUM_SUB_ERROR_BUFFER_OVERLAP
+
+    pop     r14
+    pop     r13
+    pop     r12     
     leave
     ret

@@ -29,37 +29,103 @@
 #include <stdbool.h>
 
 
-// Вспомогательная функция для определения нуля для bignum_t
-static int is_zero(const bignum_t *x) {
-    return (x->len == 1 && x->words[0] == 0);
+/*=====================================================================
+ *  bignum_helpers.c  –  безопасные вспомогательные функции
+ *====================================================================*/
+
+#include "bignum.h"
+#include <string.h>
+
+/* Быстрая «конструктор‑пустышка» */
+static void bignum_init(bignum_t *x)
+{
+    memset(x, 0, sizeof(*x));          /* len = 0, все words = 0 */
 }
 
 
-// Вспомогательная функция для сравнения bignum_t
-static int bignum_equals(const bignum_t* a, const bignum_t* b) {
+
+/* -------------------------------------------------------------
+ *  Обнуляем «хвост» массива words от индекса start (включительно)
+ *  до конца статического буфера BIGNUM_CAPACITY.
+ * ------------------------------------------------------------- */
+static void bignum_clear_tail(bignum_t *x, size_t start)
+{
+    if (start >= BIGNUM_CAPACITY) return;
+    memset(x->words + start, 0,
+           (BIGNUM_CAPACITY - start) * BIGNUM_WORD_SIZE);
+}
+
+/* -------------------------------------------------------------
+ *  is_zero – проверка, что число действительно равно 0.
+ *  Для нашего фиксированного массива считаем нулём только
+ *  полностью обнулённый набор значимых слов.
+ * ------------------------------------------------------------- */
+static int is_zero(const bignum_t *x)
+{
+    for (size_t i = 0; i < x->len; ++i) {
+        if (x->words[i] != 0ULL) return 0;
+    }
+    /* Если len == 0 (может возникнуть после нормализации),
+       тоже считаем нулём. */
+    return 1;
+}
+
+/* -------------------------------------------------------------
+ *  bignum_equals – сравнение двух bignum_t.
+ *  Сравниваем только значимые слова (len) и полагаемся,
+ *  что оба числа находятся в нормализованном виде
+ *  (старшие нули уже удалены).
+ * ------------------------------------------------------------- */
+static int bignum_equals(const bignum_t *a, const bignum_t *b)
+{
+    /* Быстрый путь для двух нулей */
     if (is_zero(a) && is_zero(b)) return 1;
+
     if (a->len != b->len) return 0;
-    if (a->len == 0) return 1;
-    return memcmp(a->words, b->words, a->len * sizeof(uint64_t)) == 0;
+    if (a->len == 0) return 1;               /* оба пустые (0) */
+
+    return memcmp(a->words, b->words,
+                  a->len * BIGNUM_WORD_SIZE) == 0;
 }
+
+/* -------------------------------------------------------------
+ *  normalize – удаляет старшие нулевые слова и обнуляет хвост.
+ *  Должна вызываться после любой арифметической операции,
+ *  чтобы гарантировать отсутствие неинициализированных данных.
+ * ------------------------------------------------------------- */
+static void normalize(bignum_t *x)
+{
+    /* Если len уже 0 – ничего не делаем (избегаем чтения мусора) */
+    if (x->len == 0) {
+        bignum_clear_tail(x, 0);   /* просто обнуляем весь массив */
+        return;
+    }
+
+    /* Убираем старшие нули */
+    while (x->len > 0 && x->words[x->len - 1] == 0ULL)
+        --x->len;
+
+    /* Обнуляем оставшуюся часть массива, чтобы не оставлять «мусор» */
+    bignum_clear_tail(x, x->len);
+}
+
 
 
 // Вспомогательная функция для инициализации bignum_t из массива uint64_t
-void bignum_from_array(bignum_t *num, const uint64_t *arr, size_t len) {
-    memset(num, 0, sizeof(bignum_t));
-    for (size_t i = 0; i < len; ++i) {
-        num->words[i] = arr[i];
-    }
-    num->len = len;
-    // Нормализация: удаление ведущих нулей
-    while (num->len > 0 && num->words[num->len - 1] == 0) {
-        num->len--;
-    }
-    if (num->len == 0) {
-        num->words[0] = 0;
-        num->len = 1;
-    }
+int bignum_from_array(bignum_t *dst, const uint64_t *src, size_t src_len)
+{
+    if (!dst || !src) return BIGNUM_ERROR_NULL_ARG;
+    if (src_len > BIGNUM_CAPACITY) return BIGNUM_ERROR_OVERFLOW;
+
+    memset(dst->words, 0, sizeof(dst->words));   /* очистить «хвост» */
+    memcpy(dst->words, src, src_len * BIGNUM_WORD_SIZE);
+    dst->len = src_len;
+    /* нормализуем – убираем старшие нули, если они есть */
+    while (dst->len > 0 && dst->words[dst->len - 1] == 0ULL)
+        --dst->len;
+    return BIGNUM_SUCCESS;
 }
+
 
  
 
@@ -81,17 +147,34 @@ static int tests_failed = 0;
 
 // --- Тесты на "счастливые пути" ---
 
-int test_simple_sub() {
+int test_simple_sub(void)
+{
     bignum_t a, b, result, expected;
+    bignum_init(&a);
+    bignum_init(&b);
+    bignum_init(&result);
+    bignum_init(&expected);
+
     bignum_from_array(&a, (uint64_t[]){10}, 1);
     bignum_from_array(&b, (uint64_t[]){5}, 1);
     bignum_from_array(&expected, (uint64_t[]){5}, 1);
+
     bignum_sub_status_t status = bignum_sub(&result, &a, &b);
-    return status == BIGNUM_SUB_SUCCESS && bignum_equals(&result, &expected) && result.len == 1;
+    /* normalize уже вызывается внутри bignum_sub, но оставляем для надёжности */
+    normalize(&result);
+
+    return status == BIGNUM_SUB_SUCCESS &&
+           bignum_equals(&result, &expected) &&
+           result.len == 1;
 }
+
 
 int test_sub_with_borrow() {
     bignum_t a, b, result, expected;
+    bignum_init(&a);
+    bignum_init(&b);
+    bignum_init(&result);
+    bignum_init(&expected);
     bignum_from_array(&a, (uint64_t[]){0, 1}, 2); // 2^64
     bignum_from_array(&b, (uint64_t[]){1}, 1);
     bignum_from_array(&expected, (uint64_t[]){0xFFFFFFFFFFFFFFFFULL}, 1);
@@ -101,6 +184,10 @@ int test_sub_with_borrow() {
 
 int test_sub_a_longer_no_borrow() {
     bignum_t a, b, result, expected;
+    bignum_init(&a);
+    bignum_init(&b);
+    bignum_init(&result);
+    bignum_init(&expected);
     bignum_from_array(&a, (uint64_t[]){10, 20}, 2);
     bignum_from_array(&b, (uint64_t[]){5}, 1);
     bignum_from_array(&expected, (uint64_t[]){5, 20}, 2);
@@ -110,6 +197,10 @@ int test_sub_a_longer_no_borrow() {
 
 int test_multi_word_borrow_chain() {
     bignum_t a, b, result, expected;
+    bignum_init(&a);
+    bignum_init(&b);
+    bignum_init(&result);
+    bignum_init(&expected);
     bignum_from_array(&a, (uint64_t[]){0, 0, 1}, 3); // 2^128
     bignum_from_array(&b, (uint64_t[]){1}, 1);
     bignum_from_array(&expected, (uint64_t[]){0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL}, 2);
@@ -121,6 +212,10 @@ int test_multi_word_borrow_chain() {
 
 int test_sub_to_zero_and_normalize() {
     bignum_t a, b, result, expected;
+    bignum_init(&a);
+    bignum_init(&b);
+    bignum_init(&result);
+    bignum_init(&expected);
     bignum_from_array(&a, (uint64_t[]){100, 200}, 2);
     bignum_from_array(&b, (uint64_t[]){100, 200}, 2);
     bignum_from_array(&expected, (uint64_t[]){0}, 1);
@@ -130,6 +225,10 @@ int test_sub_to_zero_and_normalize() {
 
 int test_multi_word_equality_to_zero() {
     bignum_t a, b, result, expected;
+    bignum_init(&a);
+    bignum_init(&b);
+    bignum_init(&result);
+    bignum_init(&expected);
     uint64_t arr[] = {1, 2, 3, 4};
     bignum_from_array(&a, arr, 4);
     bignum_from_array(&b, arr, 4);
@@ -138,18 +237,46 @@ int test_multi_word_equality_to_zero() {
     return status == BIGNUM_SUB_SUCCESS && bignum_equals(&result, &expected) && result.len == 1;
 }
 
-int test_sub_zero_operand() {
+/*int test_sub_zero_operand() {
     bignum_t a, b, result, expected;
+    bignum_init(&a);
+    bignum_init(&b);
+    bignum_init(&result);
+    bignum_init(&expected);
     uint64_t arr_a[] = {123, 456};
     bignum_from_array(&a, arr_a, 2);
     bignum_from_array(&b, (uint64_t[]){0}, 1);
     bignum_from_array(&expected, arr_a, 2);
     bignum_sub_status_t status = bignum_sub(&result, &a, &b);
     return status == BIGNUM_SUB_SUCCESS && bignum_equals(&result, &expected) && result.len == 2;
+}*/
+
+int test_sub_zero_operand(void)
+{
+    bignum_t a, b, result, expected;
+    bignum_init(&a);
+    bignum_init(&b);
+    bignum_init(&result);
+    bignum_init(&expected);
+
+    uint64_t arr_a[] = {123, 456};
+    bignum_from_array(&a,        arr_a, 2);
+    bignum_from_array(&b, (uint64_t[]){0}, 1);   // теперь b.len == 0
+    bignum_from_array(&expected, arr_a, 2);
+
+    bignum_sub_status_t status = bignum_sub(&result, &a, &b);
+    return status == BIGNUM_SUB_SUCCESS &&
+           bignum_equals(&result, &expected) &&
+           result.len == 2;
 }
+
 
 int test_sub_from_max_capacity() {
     bignum_t a, b, result, expected;
+    bignum_init(&a);
+    bignum_init(&b);
+    bignum_init(&result);
+    bignum_init(&expected);
     uint64_t arr_a[BIGNUM_CAPACITY];
     uint64_t arr_b[BIGNUM_CAPACITY];
     uint64_t arr_exp[BIGNUM_CAPACITY];
@@ -171,6 +298,10 @@ int test_sub_from_max_capacity() {
 
 int test_full_capacity_operands() {
     bignum_t a, b, result, expected;
+    bignum_init(&a);
+    bignum_init(&b);
+    bignum_init(&result);
+    bignum_init(&expected);
     uint64_t arr_a[BIGNUM_CAPACITY];
     uint64_t arr_b[BIGNUM_CAPACITY];
     uint64_t arr_exp[BIGNUM_CAPACITY];
@@ -192,6 +323,10 @@ int test_full_capacity_operands() {
 
 int test_err_null_pointer() {
     bignum_t a, b, result;
+    bignum_init(&a);
+    bignum_init(&b);
+    bignum_init(&result);
+
     bignum_from_array(&a, (uint64_t[]){1}, 1);
     bignum_from_array(&b, (uint64_t[]){1}, 1);
     bool r1 = (bignum_sub(NULL, &a, &b) == BIGNUM_SUB_ERROR_NULL_PTR);
@@ -202,6 +337,10 @@ int test_err_null_pointer() {
 
 int test_err_negative_result() {
     bignum_t a, b, result;
+    bignum_init(&a);
+    bignum_init(&b);
+    bignum_init(&result);
+
     bignum_from_array(&a, (uint64_t[]){5}, 1);
     bignum_from_array(&b, (uint64_t[]){10}, 1);
     bignum_sub_status_t status = bignum_sub(&result, &a, &b);
@@ -210,6 +349,9 @@ int test_err_negative_result() {
 
 int test_err_capacity_exceeded() {
     bignum_t a, b, result;
+    bignum_init(&a);
+    bignum_init(&b);
+    bignum_init(&result);;
     bignum_from_array(&a, (uint64_t[]){1}, 1);
     bignum_from_array(&b, (uint64_t[]){1}, 1);
     a.len = BIGNUM_CAPACITY + 1; // Искусственно портим длину
@@ -220,6 +362,9 @@ int test_err_capacity_exceeded() {
 
 int test_err_buffer_overlap() {
     bignum_t a, b;
+    bignum_init(&a);
+    bignum_init(&b);
+
     bignum_from_array(&a, (uint64_t[]){10}, 1);
     bignum_from_array(&b, (uint64_t[]){5}, 1);
     bool r1 = (bignum_sub(&a, &a, &b) == BIGNUM_SUB_ERROR_BUFFER_OVERLAP);

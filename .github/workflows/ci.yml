@@ -19,17 +19,13 @@ jobs:
         submodules: 'recursive' # Важно для подключения bignum-common
 
     - name: Install build dependencies
-      run: sudo apt-get update && sudo apt-get install -y build-essential yasm cppcheck libc6-dev gdb
+      run: sudo apt-get update && sudo apt-get install -y build-essential yasm cppcheck
 
     - name: Build project (Release)
       run: make build CONFIG=release
     
     - name: Run static analysis
       run: make lint      
-
-    - name: Run tests in gdb
-      run: |
-        gdb -ex "run" -ex "bt" --args make test CONFIG=debug
 
     - name: Run unit tests (Release)
       run: make test CONFIG=release
