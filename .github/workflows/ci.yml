@@ -47,6 +47,9 @@ jobs:
         EOF
         ./test_pthread
 
+    - name: Run tests in gdb
+      run: |
+        gdb --args make test CONFIG=release
 
     - name: Run unit tests (Release)
       run: make test CONFIG=release
