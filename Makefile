@@ -69,6 +69,9 @@ else
     ASFLAGS = $(ASFLAGS_BASE) -g dwarf2
 endif
 
+CFLAGS += -Wl,-z,noexecstack
+
+
 # --- Perf-specific settings ---
 ASM_LABELS := $(shell grep -E '^[[:space:]]*\.[A-Za-z0-9_].*:' $(ASM_SRC) | sed -E 's/^[[:space:]]*\.([A-Za-z0-9_]+):/\1/; s/[[:space:]]\+/|/g' )
 space := $(empty) $(empty)
@@ -176,7 +179,7 @@ dist: clean
 # --- Compilation Rules ---
 $(OBJ): $(ASM_SRC) 
 	@echo "Builds the submodule object file 'build/$(LIB_NAME).o' (CONFIG=$(CONFIG))..." 
-	@$(MAKE) -C $(CMP_DIR) -s build CONFIG=release	
+	@$(MAKE) -C $(CMP_DIR) -s build CONFIG=release	CFLAGS+=-Wl,-z,noexecstack
 	@echo "Builds the main object file 'build/$(LIB_NAME).o' (CONFIG=$(CONFIG))..." 
 	@$(MKDIR) $(BUILD_DIR)
 	@$(AS) $(ASFLAGS) -o $@ $<
