@@ -29,7 +29,7 @@ jobs:
 
     - name: Run tests in gdb
       run: |
-        gdb -ex "run" -ex "bt" --args make test CONFIG=release
+        gdb -ex "run" -ex "bt" --args make test CONFIG=debug
 
     - name: Run unit tests (Release)
       run: make test CONFIG=release
