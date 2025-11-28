@@ -19,33 +19,13 @@ jobs:
         submodules: 'recursive' # Важно для подключения bignum-common
 
     - name: Install build dependencies
-      run: sudo apt-get update && sudo apt-get install -y build-essential yasm cppcheck libc6-dev
+      run: sudo apt-get update && sudo apt-get install -y build-essential yasm cppcheck libc6-dev gdb
 
     - name: Build project (Release)
       run: make build CONFIG=release
     
     - name: Run static analysis
       run: make lint      
-
-    - name: Check if pthread is installed
-      run: |
-        gcc -o test_pthread -lpthread -x c - <<EOF
-        #include <pthread.h>
-        #include <stdio.h>
-
-        void* thread_function(void* arg) {
-            return NULL;
-        }
-
-        int main() {
-            pthread_t thread;
-            pthread_create(&thread, NULL, thread_function, NULL);
-            pthread_join(thread, NULL);
-            printf("Pthread is working!\n");
-            return 0;
-        }
-        EOF
-        ./test_pthread
 
     - name: Run tests in gdb
       run: |
