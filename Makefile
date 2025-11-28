@@ -30,16 +30,19 @@ BIN_DIR = bin
 TESTS_DIR = tests
 BENCH_DIR = benchmarks
 INCLUDE_DIR = include
-COMMON_INCLUDE_DIR = libs/common/include
+LIBS_DIR = libs
+COMMON_INCLUDE_DIR = $(LIBS_DIR)/common/$(INCLUDE_DIR)
+CMP_DIR = $(LIBS_DIR)/bignum-cmp
 REPORTS_DIR = $(BENCH_DIR)/reports
 DIST_DIR = dist
-DIST_INCLUDE_DIR = $(DIST_DIR)/include
+DIST_INCLUDE_DIR = $(DIST_DIR)/$(INCLUDE_DIR)
 DIST_LIB_DIR = $(DIST_DIR)/lib
 
 # --- Source & Target Files ---
 ASM_SRC = $(SRC_DIR)/$(LIB_NAME).asm
 HEADER = $(INCLUDE_DIR)/$(LIB_NAME).h
-OBJ = $(BUILD_DIR)/$(LIB_NAME).o
+CMP_OBJ = $(CMP_DIR)/$(BUILD_DIR)/bignum_cmp.o
+OBJ = $(BUILD_DIR)/$(LIB_NAME).o $(CMP_OBJ)
 TEST_BINS = $(patsubst $(TESTS_DIR)/%.c, $(BIN_DIR)/%, $(wildcard $(TESTS_DIR)/*.c))
 BENCH_BIN = bench_$(LIB_NAME)
 BENCH_BIN_ST = $(BIN_DIR)/$(BENCH_BIN)
@@ -53,7 +56,8 @@ STATIC_LIB = $(DIST_DIR)/lib$(LIB_NAME).a
 SINGLE_HEADER = $(DIST_DIR)/$(LIB_NAME).h
 
 # --- Flags ---
-CFLAGS_BASE = -std=c11 -Wall -Wextra -pedantic -I$(INCLUDE_DIR) -I$(COMMON_INCLUDE_DIR)
+CFLAGS_BASE = -std=c11 -Wall -Wextra -pedantic -I$(INCLUDE_DIR) -I$(COMMON_INCLUDE_DIR) -I$(CMP_DIR)/$(INCLUDE_DIR) -D_POSIX_C_SOURCE=201112L
+
 ASFLAGS_BASE = -f elf64
 LDFLAGS = -no-pie -lm
 
@@ -114,15 +118,17 @@ dist: clean
 	@echo "Stripping object files, keeping symbol $(LIB_NAME)..."
 	@$(STRIP) --strip-debug $(OBJ) || true; 
 	@$(STRIP) --strip-unneeded $(OBJ) || true; 
-	@$(OBJCOPY) --keep-symbol=$(LIB_NAME) --strip-all $(OBJ) "$(OBJ).stripped" || { echo "objcopy failed on $(OBJ)"; exit 1; }; 
-	@mv "$(OBJ).stripped" "$(OBJ)"; 
-	@echo "   symbols now:"; $(NM) -g --defined-only "$(OBJ)" || true; 
+#	@$(OBJCOPY) --keep-symbol=$(LIB_NAME) --strip-all $(OBJ) "$(OBJ).stripped" || { echo "objcopy failed on $(OBJ)"; exit 1; }; 
+#	@mv "$(OBJ).stripped" "$(OBJ)"; 
+	@echo "   symbols now:"; 
+#	@for object in $(OBJ); do $(NM) -g --defined-only "$$object" || true; done  
 
 # 3. Создаем статическую библиотеку
 	@$(AR) rcs $(STATIC_LIB) $(OBJ)
-	@#$(RL) $(STATIC_LIB) 
+	@$(RL) $(STATIC_LIB)
+	@$(NM) -g --defined-only  $(STATIC_LIB)
 # 4. Создаем КОРРЕКТНЫЙ единый заголовочный файл
-	@echo "Generating single-file header..."
+	@echo "\nGenerating single-file header..."
 # 4.1. Начинаем с единого include guard
 	@echo "#ifndef $(UPPER_LIB_NAME)_SINGLE_H" > $(SINGLE_HEADER)
 	@echo "#define $(UPPER_LIB_NAME)_SINGLE_H" >> $(SINGLE_HEADER)
@@ -150,8 +156,10 @@ dist: clean
 	@echo '#include "$(LIB_NAME).h"' > dist/test_dist.c; 
 	@echo '#include <assert.h>' >> dist/test_dist.c; 
 	@echo 'int main() {' >> dist/test_dist.c; 
-	@echo '    bignum_t num = {0};' >> dist/test_dist.c; 
-	@echo '    $(LIB_NAME)(&num, 5);' >> dist/test_dist.c; 
+	@echo '    bignum_t res = {.words = {0}, .len = 0};' >> dist/test_dist.c; 
+	@echo '    bignum_t a = {.words = {12345}, .len = 1};;' >> dist/test_dist.c;
+	@echo '    bignum_t b = {.words = {10000}, .len = 1};;' >> dist/test_dist.c;		
+	@echo '    $(LIB_NAME)(&res, &a, &b);' >> dist/test_dist.c; 
 	@echo '    assert(1);' >> dist/test_dist.c; 
 	@echo '    return 0;' >> dist/test_dist.c; 
 	@echo '}' >> dist/test_dist.c
@@ -167,6 +175,8 @@ dist: clean
 
 # --- Compilation Rules ---
 $(OBJ): $(ASM_SRC) 
+	@echo "Builds the submodule object file 'build/$(LIB_NAME).o' (CONFIG=$(CONFIG))..." 
+	@$(MAKE) -C $(CMP_DIR) -s build CONFIG=release	
 	@echo "Builds the main object file 'build/$(LIB_NAME).o' (CONFIG=$(CONFIG))..." 
 	@$(MKDIR) $(BUILD_DIR)
 	@$(AS) $(ASFLAGS) -o $@ $<
@@ -188,8 +198,9 @@ lint:
 	    $(TESTS_DIR)/ $(BENCH_DIR)/ $(DIST_DIR)/
 
 clean:
-	@echo "Cleaning up build artifacts (build/, bin/, dist/)..."
+	@echo "Cleaning up main build artifacts (build/, bin/, dist/)..."
 	@$(RM) $(BUILD_DIR) $(BIN_DIR) $(DIST_DIR)
+	@echo "Cleaning up submodule build artifacts..." ; 	$(MAKE) -C $(CMP_DIR) -s clean	
 
 help:
 	@echo "Usage: make <target> [CONFIG=release] [REPORT_NAME=my_report]"

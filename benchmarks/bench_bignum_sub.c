@@ -1,12 +1,12 @@
 /**
- * @file    bench_bignum_template.c
- * @brief   Микробенчмарк для профилирования bignum_template.
+ * @file    bench_bignum_sub.c
+ * @brief   Микробенчмарк для профилирования bignum_sub.
  * @author  git@bayborodov.com
  * @version 1.0.0
- * @date    03.10.2025
+ * @date    28.11.2025
  *
  * @details
- *   Вызывает функцию bignum_template на случайных
+ *   Вызывает функцию bignum_sub на случайных
  *   больших числах многократно, чтобы perf успел
  *   собрать достаточное число сэмплов.
  *
@@ -23,14 +23,14 @@
  *
  * # Сборка
  *  gcc -g -O2 -I include -no-pie -fno-omit-frame-pointer \
- *    benchmarks/bench_bignum_template.c build/bignum_template.o \
- *    -o bin/bench_bignum_template
+ *    benchmarks/bench_bignum_sub.c build/bignum_sub.o \
+ *    -o bin/bench_bignum_sub
  *
  * # Запуск perf с записью стека через frame-pointer
- * /usr/local/bin/perf record -F 9999 -o benchmarks/reports/report_bench_bignum_template -g -- bin/bench_bignum_template
+ * /usr/local/bin/perf record -F 9999 -o benchmarks/reports/report_bench_bignum_sub -g -- bin/bench_bignum_sub
  *
  * # Отчёт, отфильтрованный по символу
- * /usr/local/bin/perf report -i benchmarks/reports/report_bench_bignum_template --stdio --symbol-filter=bignum_template
+ * /usr/local/bin/perf report -i benchmarks/reports/report_bench_bignum_sub --stdio --symbol-filter=bignum_sub
  */
 
 #include <stdint.h>
@@ -38,7 +38,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <bignum.h>
-#include "bignum_template.h"
+#include "bignum_sub.h"
 
 // --- Локальные определения для компиляции ---
 // Эти константы должны быть синхронизированы с ассемблерным кодом.
@@ -70,18 +70,20 @@ int main(void) {
     // --- Фаза 1: Предварительная генерация данных ---
     printf("Pregenerating %u data sets...\n", PREGEN_DATA_COUNT);
 
-    bignum_t* sources = malloc(sizeof(bignum_t) * PREGEN_DATA_COUNT);
-    size_t* shifts = malloc(sizeof(size_t) * PREGEN_DATA_COUNT);
+    bignum_t* res = malloc(sizeof(bignum_t) * PREGEN_DATA_COUNT);
+    bignum_t* a = malloc(sizeof(bignum_t) * PREGEN_DATA_COUNT);
+    bignum_t* b = malloc(sizeof(bignum_t) * PREGEN_DATA_COUNT);
+    
 
-    if (!sources || !shifts) {
+    if (!a || !b || !res) {
         perror("Failed to allocate memory for test data");
         return 1;
     }
 
     srand((unsigned)time(NULL));
     for (unsigned i = 0; i < PREGEN_DATA_COUNT; ++i) {
-        init_random_bignum(&sources[i]);
-        shifts[i] = (size_t)(rand() % MAX_SHIFT);
+        init_random_bignum(&a[i]);
+        init_random_bignum(&b[i]);
     }
 
     // --- Фаза 2: "Горячий" цикл для профилирования ---
@@ -92,13 +94,15 @@ int main(void) {
         unsigned data_idx = i % PREGEN_DATA_COUNT;
         
         // Копируем исходное число, чтобы не портить эталон
-        bignum_t dst = sources[data_idx];
+        bignum_t res_dst = res[data_idx];
+        bignum_t a_dst = a[data_idx];
+        bignum_t b_dst = b[data_idx];
         
         // Вызываем целевую функцию
-        bignum_template(&dst, shifts[data_idx]);
+        bignum_sub(&res_dst, &a_dst, &b_dst);
         
         // Эта проверка не дает компилятору выбросить вызов функции
-        if (dst.len == 0xDEADBEEF) {
+        if (a_dst.len == 0xDEADBEEF) {
             // Никогда не выполнится
             printf("Error marker hit.\n");
             return 1;
@@ -108,8 +112,9 @@ int main(void) {
     printf("Benchmark finished.\n");
 
     // --- Фаза 3: Очистка ---
-    free(sources);
-    free(shifts);
+    free(a);
+    free(b);
+    free(res);
 
     return 0;
 }

@@ -1,12 +1,12 @@
-# bignum-template
+# bignum-sub
 
-[![C/ASM CI](https://github.com/kirill-bayborodov/bignum-template/actions/workflows/ci.yml/badge.svg)](https://github.com/kirill-bayborodov/bignum-template/actions/workflows/ci.yml)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/kirill-bayborodov/bignum-template?label=release)](https://github.com/kirill-bayborodov/bignum-template/releases/latest)
+[![C/ASM CI](https://github.com/kirill-bayborodov/bignum-sub/actions/workflows/ci.yml/badge.svg)](https://github.com/kirill-bayborodov/bignum-sub/actions/workflows/ci.yml)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/kirill-bayborodov/bignum-sub?label=release)](https://github.com/kirill-bayborodov/bignum-sub/releases/latest)
 
 
 
-`bignum-template` is a high-performance, standalone module for performing a logical template on an arbitrary-precision integer (`bignum_t`).
-A highly optimized x86-64 assembly implementation of a bignum template operation, designed for performance-critical applications. 
+`bignum-sub` is a high-performance, standalone module for performing a logical subtraction on an arbitrary-precision integer (`bignum_t`).
+A highly optimized x86-64 assembly implementation of a bignum subtraction operation, designed for performance-critical applications. 
 
 ## Distribution
 
@@ -16,7 +16,6 @@ Also available as a standalone distribution.
 ## Features
 
 -   **High Performance:** Hand-crafted x86-64 yasm assembly — an ultra-optimized, multithreading-ready engine delivering peak execution speed..
--   **Dependency-Free Core:** The core logic has no external runtime dependencies.
 -   **Tests and Benchmarks:** Provides a comprehensive test suite and performance microbenchmarks.
 -   **Automated Builds:** A comprehensive `Makefile` for easy compilation, testing, and benchmarking.
 -   **Continuous Integration:** All changes are automatically built and tested via GitHub Actions.
@@ -26,21 +25,23 @@ Also available as a standalone distribution.
 
 -   **Build-time:** `make`, `gcc`, `yasm`, `cppcheck`.
 -   **Component:** This project requires `bignum-common` as a git submodule located at `libs/common`.
+-   **Component:** This project requires `bignum-cmp` as a git submodule located at `libs/bignum-cmp`.
 
 To clone the repository with its submodule, use:
 ```bash
-git clone --recurse-submodules https://github.com/kirill-bayborodov/bignum-template.git
+git clone --recurse-submodules https://github.com/kirill-bayborodov/bignum-sub.git
 ```
 ## API
 
-The library provides a single function, declared in `include/bignum_template.h`.
+The library provides a single function, declared in `include/bignum_sub.h`.
 
 ```c
-bignum_status_t bignum_template(bignum_t* num, size_t template );
+bignum_sub_status_t bignum_sub(bignum_t *result, const bignum_t *a, const bignum_t *b);
 ```
--   **`num`**: A pointer to the `bignum_t` structure to be shifted.
--   **`template`**: The number of bits to template.
--   **Returns**: A `bignum_status_t` enum (`BIGNUM_SUCCESS`, `BIGNUM_ERROR_NULL_ARG`, `BIGNUM_ERROR_OVERFLOW`).
+-   **`result`**: A pointer to the `bignum_t` structure to be operation result.
+-   **`a`**: A pointer to the `bignum_t` structure to subtraction.
+-   **`b`**: A pointer to the `bignum_t` structure to subtracted.
+-   **Returns**: A `bignum_sub_status_t` enum (`BIGNUM_SUB_SUCCESS`, `BIGNUM_SUB_ERROR_NULL_PTR`, `BIGNUM_SUB_ERROR_NEGATIVE_RESULT`, `BIGNUM_SUB_ERROR_CAPACITY_EXCEEDED`, `BIGNUM_SUB_ERROR_BUFFER_OVERLAP`).
 
 ## How to Build, Test, Install and Use
 
@@ -91,24 +92,24 @@ make clean
 
 ## How to Use
 
-This project produces an object file (`bignum_template.o`) which you can link with your own application.
+This project produces an object file (`bignum_sub.o`) which you can link with your own application.
 
 **1. Clone the repository with submodules:**
 ```bash
-git clone --recurse-submodules https://github.com/kirill-bayborodov/bignum-template.git
-cd bignum-template
+git clone --recurse-submodules https://github.com/kirill-bayborodov/bignum-sub.git
+cd bignum-sub
 ```
 
 **2. Build the object file:**
 ```bash
 make build
 ```
-The output will be located at `build/bignum_template.o`.
+The output will be located at `build/bignum_sub.o`.
 
 **3. Link with your application:**
 When compiling your project, include the object file and specify the include paths for the headers.
 ```bash
-gcc your_app.c build/bignum_template.o -I./include -I./libs/common/include -o your_app -no-pie
+gcc your_app.c build/bignum_sub.o libs/bignum-cmp/build/bignum_cmp.o -I./include -I./libs/common/include -I./libs/bignum-cmp/include -o your_app -no-pie
 ```	
 
 ## Contributing
@@ -121,7 +122,7 @@ Contributions are welcome! Please follow these steps:
 5.  Push to the branch (`git push origin feature/AmazingFeature`).
 6.  Open a Pull Request.
 
-When creating Issues or Pull Requests, please use the provided templates to ensure all necessary information is included.
+When creating Issues or Pull Requests, please use the provided subtractions to ensure all necessary information is included.
 
 ## License
 
