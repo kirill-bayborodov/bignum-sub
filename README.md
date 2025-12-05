@@ -24,7 +24,7 @@ Also available as a standalone distribution.
 ## Dependencies
 
 -   **Build-time:** `make`, `gcc`, `yasm`, `cppcheck`.
--   **Component:** This project requires `bignum-common` as a git submodule located at `libs/common`.
+-   **Component:** This project requires `bignum-common` as a git submodule located at `libs/bignum-common`.
 -   **Component:** This project requires `bignum-cmp` as a git submodule located at `libs/bignum-cmp`.
 
 To clone the repository with its submodule, use:
@@ -109,7 +109,7 @@ The output will be located at `build/bignum_sub.o`.
 **3. Link with your application:**
 When compiling your project, include the object file and specify the include paths for the headers.
 ```bash
-gcc your_app.c build/bignum_sub.o libs/bignum-cmp/build/bignum_cmp.o -I./include -I./libs/common/include -I./libs/bignum-cmp/include -o your_app -no-pie
+gcc your_app.c build/bignum_sub.o libs/bignum-cmp/build/bignum_cmp.o -I./include -I./libs/bignum-common/include -I./libs/bignum-cmp/include -o your_app -no-pie
 ```	
 
 ## Contributing
@@ -122,7 +122,7 @@ Contributions are welcome! Please follow these steps:
 5.  Push to the branch (`git push origin feature/AmazingFeature`).
 6.  Open a Pull Request.
 
-When creating Issues or Pull Requests, please use the provided subtractions to ensure all necessary information is included.
+When creating Issues or Pull Requests, please use the provided templates to ensure all necessary information is included.
 
 ## License
 
